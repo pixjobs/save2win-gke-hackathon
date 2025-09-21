@@ -1,0 +1,60 @@
+# 1. Kubernetes Service Account (KSA) for our pod to use.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: save2win-engine-sa
+  namespace: boa # Deploys into the same namespace as Bank of Anthos
+---
+# 2. The Deployment for the Save2Win Engine.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: save2win-engine
+  namespace: boa
+  labels:
+    app: save2win-engine
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: save2win-engine
+  template:
+    metadata:
+      labels:
+        app: save2win-engine
+    spec:
+      # CRITICAL: This tells the pod to run as the KSA we defined above.
+      serviceAccountName: save2win-engine-sa
+      containers:
+        - name: server
+          image: save2win-engine # Skaffold will replace this
+          ports:
+            - containerPort: 8080
+          env:
+            # Pass the Project ID and Region to the application
+            - name: GCP_PROJECT_ID
+              value: "gke-trial-472609" # <-- REPLACE WITH YOUR GCP PROJECT ID
+            - name: GCP_REGION
+              value: "us-central1" # <-- REPLACE WITH YOUR GKE CLUSTER REGION
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "256Mi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
+---
+# 3. The Service to allow other pods in the cluster to talk to the engine.
+apiVersion: v1
+kind: Service
+metadata:
+  name: save2win-engine
+  namespace: boa
+spec:
+  type: ClusterIP
+  selector:
+    app: save2win-engine
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: 8080

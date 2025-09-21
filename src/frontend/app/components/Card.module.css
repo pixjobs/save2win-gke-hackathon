@@ -1,0 +1,4 @@
+.card { background: var(--card-background); padding: 1.5rem; border-radius: 16px; box-shadow: 0 4px 12px rgba(0,0,0,0.08); }
+.cardHeader { display: flex; align-items: center; gap: 0.75rem; margin-bottom: 1rem; }
+.cardTitle { margin: 0; font-size: 1.2rem; color: var(--primary-text); }
+.cardContent { color: var(--secondary-text); }

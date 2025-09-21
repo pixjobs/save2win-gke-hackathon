@@ -1,0 +1,26 @@
+:root {
+  --background-color: #f0f4f8;
+  --card-background: #ffffff;
+  --primary-text: #1a3b5d;
+  --secondary-text: #5a7184;
+  --accent-color: #0066cc;
+  --quest-accent: #28a745;
+  --tip-accent: #ffc107;
+  --badge-bg: #e9ecef;
+}
+
+* {
+  box-sizing: border-box;
+  padding: 0;
+  margin: 0;
+}
+
+body {
+  background-color: var(--background-color);
+  color: var(--primary-text);
+  line-height: 1.6;
+}
+
+h1, h2, h3 {
+  font-weight: 600;
+}

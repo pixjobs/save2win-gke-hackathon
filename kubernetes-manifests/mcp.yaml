@@ -1,0 +1,48 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mcp-service
+  labels:
+    app: mcp-service
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: mcp-service
+  template:
+    metadata:
+      labels:
+        app: mcp-service
+    spec:
+      containers:
+        - name: mcp-server
+          # Skaffold will automatically replace 'mcp-service' with the full image URL.
+          image: mcp-service
+          ports:
+            - containerPort: 8080
+          env:
+            - name: PORT
+              value: "8080"
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
+            limits:
+              cpu: "250m"
+              memory: "256Mi"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mcp-service
+  labels:
+    app: mcp-service
+spec:
+  # Exposes the service on an internal-only IP within the cluster.
+  type: ClusterIP 
+  selector:
+    app: mcp-service
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: 8080
