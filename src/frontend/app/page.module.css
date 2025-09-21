@@ -1,0 +1,2 @@
+.main { display: flex; flex-direction: column; justify-content: center; align-items: center; min-height: 100vh; padding: 2rem; }
+.errorCard { background-color: #fff0f0; color: #d00; border: 1px solid #d00; padding: 1.5rem; border-radius: 12px; text-align: center; max-width: 600px; }

@@ -1,0 +1,48 @@
+apiVersion: skaffold/v4beta1
+kind: Config
+metadata:
+  name: save2win-extension
+
+# ==============================================================================
+#  BUILD PHASE: Defines how to build the container images for your services.
+# ==============================================================================
+build:
+  artifacts:
+    # --- Your Hackathon Microservices ---
+    - image: save2win-frontend
+      context: src/frontend
+    - image: save2win-engine
+      context: src/save2win-engine
+    - image: mcp-service
+      context: src/mcp
+  # Defines a profile for building in the cloud if Docker isn't running locally.
+  # Activate this by adding the '-p gcb' flag to your skaffold command.
+  profiles:
+    - name: gcb
+      googleCloudBuild:
+        projectId: gke-trial-472609 # This should be your GCP Project ID
+
+# ==============================================================================
+#  DEPLOY PHASE: Defines how to deploy your services to the GKE cluster.
+# ==============================================================================
+deploy:
+  kubectl:
+    # This points to YOUR manifests, not the Bank of Anthos ones.
+    manifests:
+      - kubernetes-manifests/*.yaml
+    # --- CRITICAL FIX ---
+    # This forces all your services to deploy into the 'boa' namespace,
+    # so they can communicate with the Bank of Anthos services.
+    defaultNamespace: boa
+
+# ==============================================================================
+#  DEV-TIME FEATURES: Useful features for the `skaffold dev` command.
+# ==============================================================================
+portForward:
+  # This automatically makes your frontend service available on http://localhost:8080
+  # while `skaffold dev` is running, so you can test it easily.
+  - resourceType: service
+    resourceName: save2win-frontend # Must match the service name in your frontend.yaml
+    namespace: boa
+    port: 80
+    localPort: 8080

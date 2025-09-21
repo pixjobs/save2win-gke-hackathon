@@ -1,0 +1,10 @@
+.dashboard { width: 100%; max-width: 900px; }
+.header { text-align: center; margin-bottom: 2.5rem; position: relative; }
+.playerStats { display: flex; justify-content: center; gap: 1rem; background: var(--card-background); padding: 0.5rem 1rem; border-radius: 8px; max-width: 300px; margin: 1rem auto; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
+.logoutButton { position: absolute; top: 0; right: 0; background: none; border: 1px solid #ccc; color: var(--secondary-text); padding: 0.4rem 0.8rem; border-radius: 6px; cursor: pointer; display: flex; align-items: center; gap: 0.5rem; }
+.logoutButton:hover { background-color: #f1f1f1; }
+.grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; }
+.fullWidthCard { grid-column: 1 / -1; }
+.badgeContainer { display: flex; flex-wrap: wrap; gap: 0.75rem; }
+.badge { background-color: var(--badge-bg); color: var(--primary-text); padding: 0.4rem 1rem; border-radius: 16px; font-weight: 500; }
+@media (max-width: 768px) { .grid { grid-template-columns: 1fr; } }

@@ -17,8 +17,9 @@ DB_LEDGER_CONFIG = {
     "user": "admin", "password": "password"
 }
 
-PERSONAS_FILE = "data/personas.json"
-TRANSACTIONS_FILE = "data/transactions.json"
+PERSONAS_FILE = "./generate/data/personas.json"
+TRANSACTIONS_FILE = "./generate/data/transactions.json"
+
 LOCAL_ROUTING_NUM = "123456789"
 
 def load_json(path_str: str):

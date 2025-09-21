@@ -1,0 +1,41 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: save2win-frontend
+  namespace: boa
+  labels:
+    app: save2win-frontend
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: save2win-frontend
+  template:
+    metadata:
+      labels:
+        app: save2win-frontend
+    spec:
+      containers:
+        - name: server
+          image: save2win-frontend # Skaffold will replace this
+          ports:
+            - containerPort: 3000
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "256Mi"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: save2win-frontend
+  namespace: boa
+spec:
+  # This creates a public IP address to access your web app.
+  type: LoadBalancer
+  selector:
+    app: save2win-frontend
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: 3000
