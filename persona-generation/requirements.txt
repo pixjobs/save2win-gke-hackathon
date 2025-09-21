@@ -1,0 +1,5 @@
+google-cloud-aiplatform 
+tqdm
+psycopg2-binary
+tqdm
+bcrypt
