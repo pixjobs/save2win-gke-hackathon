@@ -1,0 +1,24 @@
+sequenceDiagram
+  autonumber
+  participant User as User (Browser)
+  participant FE as Frontend (React/Nginx)
+  participant S2W as Save2Win Engine (Flask + ADK)
+  participant MCP as MCP Server
+  participant TXS as Bank of Anthos transactionservice
+  participant GEM as Gemini API
+
+  User->>FE: Open dashboard / Request game state
+  FE->>S2W: GET /game-state (userId)
+  S2W->>MCP: getTransactions(userId)
+  MCP->>TXS: /transactions?userId=...
+  TXS-->>MCP: Transactions (normalized)
+  MCP-->>S2W: Context bundle
+
+  Note right of S2W: Apply privacy filters / redact PII
+
+  S2W->>GEM: Prompt(context)
+  GEM-->>S2W: Quest + Tip
+
+  S2W->>S2W: Game logic (XP, streaks, badges)
+  S2W-->>FE: Game state (XP, quests, badges, tips)
+  FE-->>User: Render dashboard
