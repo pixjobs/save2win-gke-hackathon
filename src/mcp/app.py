@@ -8,8 +8,6 @@ from flask import Flask, jsonify, request
 from werkzeug.exceptions import InternalServerError, BadRequest
 
 # ---- Config (override via env) ----
-# This service no longer needs AI-related configs.
-# It only needs to know where to fetch data from.
 TRANSACTIONS_API_URL = os.getenv(
     "TRANSACTIONS_API_URL",
     "http://transactionhistory.boa.svc.cluster.local/transactions",
@@ -17,13 +15,11 @@ TRANSACTIONS_API_URL = os.getenv(
 
 # ---- Flask App Setup ----
 app = Flask(__name__)
-# Use Flask's logger for consistent logging
 gunicorn_logger = logging.getLogger('gunicorn.error')
 app.logger.handlers = gunicorn_logger.handlers
 app.logger.setLevel(gunicorn_logger.level)
 
 # ---- HTTP Session with Retries ----
-# A resilient session for making calls to the downstream transactionhistory service.
 _session = requests.Session()
 _retries = Retry(
     total=3,
@@ -51,8 +47,8 @@ def root():
 @app.get("/v1/context/transactions")
 def get_transaction_context():
     """
-    Fetches raw transaction data from the transactionhistory service and
-    returns it directly without modification or enrichment.
+    Fetches raw transaction data from the transactionhistory service for a
+    specific account_id and returns it directly.
     """
     account_id = request.args.get("account_id")
     if not account_id:
@@ -61,22 +57,28 @@ def get_transaction_context():
 
     try:
         headers = {"Accept": "application/json"}
-        # Pass through the Authorization header if it exists
         if auth_header := request.headers.get("Authorization"):
             headers["Authorization"] = auth_header
 
-        # Construct the URL with the account_id as a path variable
+        # The URL is correctly constructed with the account_id in the path.
         full_transactions_url = f"{TRANSACTIONS_API_URL}/{account_id}"
         app.logger.info(f"Fetching transactions for account '{account_id}' from {full_transactions_url}")
 
-        r = _session.get(full_transactions_url, headers=headers, timeout=5.0)
+        # --- START OF FIX ---
+        # The incorrect 'params' argument has been removed.
+        # The requests library will now make the GET request to the exact URL
+        # specified in full_transactions_url, which is the correct behavior.
+        r = _session.get(
+            full_transactions_url, 
+            headers=headers, 
+            timeout=5.0
+        )
+        # --- END OF FIX ---
         
-        # Raise an exception for bad status codes (4xx or 5xx)
         r.raise_for_status()
         
         payload = r.json()
 
-        # Robustly handle both direct list and object-wrapped list responses
         if isinstance(payload, list):
             raw_transactions = payload
         elif isinstance(payload, dict):
@@ -84,16 +86,15 @@ def get_transaction_context():
         else:
             raw_transactions = []
         
-        app.logger.info(f"Successfully fetched and returning {len(raw_transactions)} raw transactions.")
+        app.logger.info(f"Successfully fetched {len(raw_transactions)} transactions for account {account_id}.")
 
-        # Return the data in the expected context structure
         return jsonify({
             "ok": True,
             "context": {
-                "provider": "bank-of-anthos", # Provider is now just the raw source
+                "provider": "bank-of-anthos",
                 "type": "transaction_history",
                 "accountId": account_id,
-                "data": raw_transactions  # Pass the raw data directly
+                "data": raw_transactions
             }
         })
 
