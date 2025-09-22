@@ -1,24 +1,40 @@
 sequenceDiagram
   autonumber
-  participant User as User (Browser)
-  participant FE as Frontend (React/Nginx)
-  participant S2W as Save2Win Engine (Flask + ADK)
-  participant MCP as MCP Server
-  participant TXS as Bank of Anthos transactionservice
+  participant U as User (Browser)
+  participant UI as Save2Win UI (Next.js + proxy)
+  participant BoA as Bank of Anthos Frontend (Flask)
+  participant CB as Save2Win /api/oauth (callback)
+  participant API as Save2Win /api/game-state (proxy)
+  participant ENG as Save2Win Engine (Flask)
+  participant MCP as MCP Service
+  participant TXS as BoA transactionservice
   participant GEM as Gemini API
 
-  User->>FE: Open dashboard / Request game state
-  FE->>S2W: GET /game-state (userId)
-  S2W->>MCP: getTransactions(userId)
-  MCP->>TXS: /transactions?userId=...
-  TXS-->>MCP: Transactions (normalized)
-  MCP-->>S2W: Context bundle
+  %% ---- Login / OAuth ----
+  U->>UI: Click “Open Bank of Anthos”
+  UI->>BoA: GET /bank/login (redirects to BoA login page)
+  Note over U, BoA: User enters credentials into Bank of Anthos
+  BoA-->>CB: POST to /api/oauth callback with id_token
+  CB-->>U: 302 Redirect to /login/callback (sets HttpOnly cookie `boa_id_token`)
+  U->>UI: /login/callback page reloads opener & closes popup
 
-  Note right of S2W: Apply privacy filters / redact PII
+  %% ---- Session & Data ----
+  U->>UI: Open dashboard / refresh page
+  UI->>API: GET /api/game-state (browser automatically sends cookie)
+  API->>API: Read `boa_id_token` from HttpOnly cookie
+  API->>ENG: GET /api/v1/game-state (Authorization: Bearer <id_token>)
 
-  S2W->>GEM: Prompt(context)
-  GEM-->>S2W: Quest + Tip
+  %% ---- Engine gathers context & computes ----
+  ENG->>MCP: getTransactions(userId from JWT)
+  MCP->>TXS: GET /transactions?userId=...
+  TXS-->>MCP: Raw Transactions
+  MCP-->>ENG: Context bundle (transactions)
 
-  S2W->>S2W: Game logic (XP, streaks, badges)
-  S2W-->>FE: Game state (XP, quests, badges, tips)
-  FE-->>User: Render dashboard
+  Note right of ENG: Game logic (XP, streaks, badges) is applied.
+
+  ENG->>GEM: (Optional) Prompt(context) for quest/tip
+  GEM-->>ENG: Response with Quest + Tip
+
+  ENG-->>API: Final Game State JSON
+  API-->>UI: Game State JSON
+  UI-->>U: Render dashboard (XP, quests, badges, tips)

@@ -3,46 +3,111 @@ kind: Config
 metadata:
   name: save2win-extension
 
-# ==============================================================================
-#  BUILD PHASE: Defines how to build the container images for your services.
-# ==============================================================================
 build:
+  # NOTE: In v4, DO NOT put defaultRepo here (it causes the error you saw).
+  # Pass --default-repo on the CLI instead.
+  tagPolicy:
+    gitCommit: {}
+  platforms:
+    - linux/amd64
   artifacts:
-    # --- Your Hackathon Microservices ---
+    # ---------- Next.js frontend ----------
     - image: save2win-frontend
       context: src/frontend
+      docker:
+        dockerfile: Dockerfile.frontend
+      sync:
+        manual:
+          # paths are RELATIVE to context (src/frontend)
+          - src: "app/**/*"
+            dest: /app/app
+          - src: "public/**/*"
+            dest: /app/public
+
+    # ---------- Game engine ----------
     - image: save2win-engine
       context: src/save2win-engine
+      docker:
+        dockerfile: Dockerfile
+      sync:
+        manual:
+          - src: "**/*.py"
+            dest: /app
+
+    # ---------- MCP service ----------
     - image: mcp-service
       context: src/mcp
-  # Defines a profile for building in the cloud if Docker isn't running locally.
-  # Activate this by adding the '-p gcb' flag to your skaffold command.
-  profiles:
-    - name: gcb
-      googleCloudBuild:
-        projectId: gke-trial-472609 # This should be your GCP Project ID
+      docker:
+        dockerfile: Dockerfile
+      sync:
+        manual:
+          - src: "**/*.py"
+            dest: /app
 
-# ==============================================================================
-#  DEPLOY PHASE: Defines how to deploy your services to the GKE cluster.
-# ==============================================================================
+manifests:
+  rawYaml:
+    - kubernetes-manifests/*.yaml
+
 deploy:
   kubectl:
-    # This points to YOUR manifests, not the Bank of Anthos ones.
-    manifests:
-      - kubernetes-manifests/*.yaml
-    # --- CRITICAL FIX ---
-    # This forces all your services to deploy into the 'boa' namespace,
-    # so they can communicate with the Bank of Anthos services.
     defaultNamespace: boa
+  statusCheckDeadlineSeconds: 600
 
-# ==============================================================================
-#  DEV-TIME FEATURES: Useful features for the `skaffold dev` command.
-# ==============================================================================
 portForward:
-  # This automatically makes your frontend service available on http://localhost:8080
-  # while `skaffold dev` is running, so you can test it easily.
   - resourceType: service
-    resourceName: save2win-frontend # Must match the service name in your frontend.yaml
+    resourceName: save2win-frontend
     namespace: boa
     port: 80
     localPort: 8080
+  - resourceType: service
+    resourceName: save2win-engine
+    namespace: boa
+    port: 80
+    localPort: 8081
+  - resourceType: service
+    resourceName: mcp-service
+    namespace: boa
+    port: 80
+    localPort: 8082
+
+profiles:
+  # Build/deploy with Google Cloud Build, but ONLY the frontend artifact.
+  # This avoids the "FROM builder/deps" errors in engine/MCP until those Dockerfiles are fixed.
+  - name: gcb-frontend
+    build:
+      googleCloudBuild:
+        projectId: gke-trial-472609
+      artifacts:
+        - image: save2win-frontend
+          context: src/frontend
+          docker:
+            dockerfile: Dockerfile
+          sync:
+            manual:
+              - src: "app/**/*"
+                dest: /app/app
+              - src: "public/**/*"
+                dest: /app/public
+    manifests:
+      rawYaml:
+        - kubernetes-manifests/*save2win-frontend*.yaml
+        - kubernetes-manifests/ingress.yaml
+        - kubernetes-manifests/oauth-config.yaml
+
+  # Full build (all artifacts) via GCB — use this once engine/MCP Dockerfiles are fixed.
+  - name: gcb-all
+    build:
+      googleCloudBuild:
+        projectId: gke-trial-472609
+
+  # Local dev (no push) — handy for minikube/kind
+  - name: dev
+    build:
+      local:
+        push: false
+
+  # Prod tagging style (optional)
+  - name: prod
+    build:
+      tagPolicy:
+        sha256: {}

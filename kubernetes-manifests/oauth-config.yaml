@@ -1,0 +1,9 @@
+# kubernetes-manifests/oauth-config.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: oauth-config
+  namespace: boa
+data:
+  DEMO_OAUTH_CLIENT_ID: save2win
+  DEMO_OAUTH_REDIRECT_URI: http://34.95.89.70/api/oauth
