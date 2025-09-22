@@ -1,4 +1,6 @@
-// app/api/game-state/route.js
+// FILE: app/api/game-state/route.js
+// This is the single, correct API route that the Dashboard component will call.
+
 export const dynamic = 'force-dynamic';
 
 import { NextResponse } from 'next/server';
@@ -6,9 +8,15 @@ import { cookies } from 'next/headers';
 import http from 'node:http';
 import https from 'node:https';
 
-const ENGINE_URL =
+// --- START OF FIX ---
+// The ENGINE_URL now correctly points to the /summary endpoint on the backend.
+const BASE_URL =
   process.env.ENGINE_URL ||
   'http://save2win-engine.boa.svc.cluster.local/api/v1/game-state';
+
+const ENGINE_URL = `${BASE_URL.replace(/\/+$/, '')}/summary`;
+// --- END OF FIX ---
+
 
 const agent = ENGINE_URL.startsWith('https:')
   ? new https.Agent({ keepAlive: true, timeout: 30_000 })
@@ -26,10 +34,10 @@ export async function GET(req) {
   }
 
   const controller = new AbortController();
-  const to = setTimeout(() => controller.abort(), 10_000);
+  const to = setTimeout(() => controller.abort(), 15_000);
 
   try {
-    const resp = await fetch(ENGINE_URL, {
+    const resp = await fetch(ENGINE_URL, { // It now calls the correct summary URL
       headers: { authorization: authHeader },
       cache: 'no-store',
       // @ts-ignore — Node runtime
@@ -39,16 +47,8 @@ export async function GET(req) {
 
     clearTimeout(to);
 
-    if (resp.status === 401 || resp.status === 403) {
-      const text = await safeText(resp);
-      return NextResponse.json(
-        { error: 'Unauthorized when calling engine', details: text || undefined },
-        { status: resp.status }
-      );
-    }
-
     if (!resp.ok) {
-      const text = await safeText(resp);
+      const text = await resp.text().catch(() => '');
       return NextResponse.json(
         { error: 'Failed to fetch game state from engine', status: resp.status, details: text || undefined },
         { status: resp.status }
@@ -56,7 +56,18 @@ export async function GET(req) {
     }
 
     const data = await resp.json();
-    return NextResponse.json(data);
+    
+    // --- RECOMMENDED RESHAPE ---
+    // Reshape the data to match what the Dashboard component expects.
+    const reshapedData = {
+      ...data.game, // Unpack xp, level, badges, quest, tip
+      transactions: data.summary?.recent || [],
+      buckets: data.summary?.buckets || [],
+      weeklySummary: data.summary?.stats?.last_7d || {},
+      engine: data.version, // Pass through version info if available
+    };
+    return NextResponse.json(reshapedData);
+    // --- END RESHAPE ---
 
   } catch (err) {
     clearTimeout(to);
@@ -66,8 +77,4 @@ export async function GET(req) {
       { status: isAbort ? 504 : 500 }
     );
   }
-}
-
-async function safeText(res) {
-  try { return await res.text(); } catch { return ''; }
 }
