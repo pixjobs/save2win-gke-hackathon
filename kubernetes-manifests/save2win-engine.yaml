@@ -1,15 +1,9 @@
-# ==============================================================================
-#  1. Kubernetes Service Account (KSA)
-# ==============================================================================
 apiVersion: v1
 kind: ServiceAccount
 metadata:
   name: save2win-engine-sa
   namespace: boa
 ---
-# ==============================================================================
-#  2. Deployment
-# ==============================================================================
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -33,16 +27,22 @@ spec:
           image: save2win-engine
           ports:
             - containerPort: 8080
-          # --- FIX FOR AUTOPILOT ---
-          # These values meet Autopilot's minimum requirements for general-purpose workloads.
+          volumeMounts:
+            - name: public-key-volume
+              mountPath: /var/private/
+              readOnly: true
           resources:
             requests:
-              cpu: "250m"      # 0.25 vCPU
-              memory: "512Mi" # 512 MB of RAM
+              cpu: "250m"
+              memory: "512Mi"
+      volumes:
+        - name: public-key-volume
+          secret:
+            secretName: public-key
+            items:
+            - key: key.pub
+              path: boa_jwt_key.pub
 ---
-# ==============================================================================
-#  3. Service
-# ==============================================================================
 apiVersion: v1
 kind: Service
 metadata:

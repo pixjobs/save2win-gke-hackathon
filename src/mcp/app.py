@@ -4,19 +4,19 @@ import requests
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 from flask import Flask, jsonify, request
-from werkzeug.exceptions import InternalServerError, Unauthorized
+from werkzeug.exceptions import InternalServerError, Unauthorized, BadRequest
 
 import vertexai
 from vertexai.generative_models import GenerativeModel
 
 # ---- Config (override via env) ----
 PROJECT_ID = os.getenv("PROJECT_ID")                              # optional
-VERTEX_LOCATION = os.getenv("VERTEX_LOCATION", "us-central1")
+VERTEX_LOCATION = os.getenv("VERTEX_LOCATION", "europe-west1")
 TRANSACTIONS_API_URL = os.getenv(
     "TRANSACTIONS_API_URL",
     "http://transactionhistory.boa.svc.cluster.local/transactions",
 )
-MODEL_NAME = os.getenv("MODEL_NAME", "gemini-1.5-flash-001")
+MODEL_NAME = os.getenv("MODEL_NAME", "gemini-2.5-flash") # Note: You had gemini-1.5-flash before, updated to your latest version
 MAX_TXNS_FOR_ENRICH = int(os.getenv("MAX_TXNS_FOR_ENRICH", "50"))
 DISABLE_GEMINI = os.getenv("DISABLE_GEMINI", "false").lower() in ("1", "true", "yes")
 
@@ -126,22 +126,36 @@ def root():
 @app.get("/v1/context/transactions")
 def get_transaction_context():
     auth_header = request.headers.get("Authorization")  # Optional depending on BoA setup
-    account_id = request.args.get("account_id", "1234567890")
+
+    # --- START OF PATCH: Rely on account_id from save2win-engine ---
+    # The account_id is now expected as a query parameter from the upstream engine.
+    account_id = request.args.get("account_id")
+
+    # If the engine fails to provide the account_id, it's a bad request.
+    if not account_id:
+        app.logger.error("Request from engine is missing 'account_id' query parameter.")
+        raise BadRequest("Missing 'account_id' query parameter.")
+    # --- END OF PATCH ---
 
     try:
         headers = {"Accept": "application/json"}
         if auth_header:
             headers["Authorization"] = auth_header
 
+        # Construct the URL with the account_id as a path variable, as required by transactionhistory.
+        full_transactions_url = f"{TRANSACTIONS_API_URL}/{account_id}"
+
         r = _session.get(
-            TRANSACTIONS_API_URL,
+            full_transactions_url,  # Use the correctly formatted URL
             headers=headers,
-            params={"account_id": account_id},
+            # The 'params' argument is removed, as account_id is now in the path.
             timeout=5,
         )
+
         r.raise_for_status()
         payload = r.json()
-        raw = payload.get("transactions", []) if isinstance(payload, dict) else []
+        # The TransactionHistory service returns a list directly, not a dict with a "transactions" key.
+        raw = payload if isinstance(payload, list) else []
         enriched = enrich_transactions_with_gemini(raw)
 
         return jsonify({
