@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: accounts-db-config
+  namespace: boa
+data:
+  ACCOUNTS_DB_URI: "postgresql://accounts-db:26257/accounts?sslmode=disable"
