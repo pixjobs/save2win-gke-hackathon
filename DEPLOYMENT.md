@@ -1,165 +1,106 @@
-# Deployment Guide for Save2Win
+🏆 Save2Win: Complete Deployment Guide
 
-This guide provides **step-by-step instructions** to deploy the base **Bank of Anthos** application onto a **Google Kubernetes Engine (GKE) Autopilot** cluster. Completing these steps prepares the foundational platform for the Save2Win features.
+This guide provides step-by-step instructions to deploy the **Save2Win
+application**, which consists of two main parts:
 
----
+-   Part 1: The Base Platform --- Deploying the original Bank of Anthos
+    application onto a GKE Autopilot cluster.
+-   Part 2: The AI Extension --- Deploying your new microservices
+    (frontend, engine, mcp) and the Ingress controller to enable AI
+    features and seamless login.
 
-## ✅ Prerequisites
+------------------------------------------------------------------------
+
+✅ Prerequisites
 
 Ensure the following are installed and configured on your local machine:
 
-- **Google Cloud Account**: A GCP project created with billing enabled.
-- **Git**: To clone the project repository.
-- **Google Cloud SDK (`gcloud`)**: Install per your OS — see the official [Installation Guide](https://cloud.google.com/sdk/docs/install).
-- **Project Code**: The `save2win-gke-hackathon` repository cloned locally.
+-   Google Cloud Account: A GCP project created with billing enabled.
+-   Git: To clone the project repository.
+-   Google Cloud SDK (gcloud): Install per your OS --- see the official
+    Installation Guide.
+-   Project Code: The save2win-gke-hackathon repository cloned locally.
 
-### Required `gcloud` Components
-The deployment relies on specific components to interact with Kubernetes and build/deploy artifacts.
+Required gcloud Components
 
-**Standard install (most setups):**
-```bash
-gcloud components install kubectl skaffold gke-gcloud-auth-plugin
-```
+The deployment relies on specific components to interact with Kubernetes
+and build/deploy artifacts.
 
-**If your `gcloud` was installed via `apt` on Linux/WSL (component manager disabled):**
-```bash
-sudo apt-get update && sudo apt-get install   kubectl   google-cloud-cli-gke-gcloud-auth-plugin   google-cloud-cli-skaffold
-```
+Standard install (most setups): gcloud components install kubectl
+skaffold gke-gcloud-auth-plugin
 
-> Tip: Verify installs
-> ```bash
-> gcloud --version
-> kubectl version --client
-> skaffold version
-> ```
+If installed via apt on Linux/WSL (component manager disabled): sudo
+apt-get update && sudo apt-get install kubectl
+google-cloud-cli-gke-gcloud-auth-plugin google-cloud-cli-skaffold
 
----
+Tip: Verify installs with: gcloud --version kubectl version --client
+skaffold version
 
-## 🧩 Step 1: Local Configuration
+------------------------------------------------------------------------
 
-The deployment script uses a local env file to manage credentials securely. Create and configure this file before running any commands.
+Part 1: Deploying the Bank of Anthos Foundation
 
-1) **Copy the example file** in the project root:
-```bash
-cp .env.example .env.local
-```
+These steps prepare the foundational platform for the Save2Win features.
 
-2) **Edit `.env.local`** and fill in your Google Cloud details:
+Step 1: Local Configuration cp .env.example .env.local
 
-**File: `.env.local`**
-```bash
-# --- PRIVATE LOCAL CONFIGURATION ---
-# This file is for your local setup only.
-# It is ignored by Git and should NEVER be committed.
+Edit .env.local: GCP_ACCOUNT_EMAIL="your-email@example.com"
+PROJECT_ID="your-gcp-project-id" CLUSTER_NAME="bank-of-anthos"
+REGION="europe-west1" AR_REPO_NAME="bank-of-anthos-repo"
 
-GCP_ACCOUNT_EMAIL="yang.pei@lgcgroup.com"
-PROJECT_ID="gke-trial-472609"
-CLUSTER_NAME="bank-of-anthos"
-REGION="europe-west1"
-```
+Step 2: Create the GKE Autopilot Cluster source .env.local gcloud
+container clusters create-auto "$CLUSTER_NAME" --project="$PROJECT_ID"
+--region="\$REGION"
 
-> Note: Keep `.env.local` private (it's gitignored by default).
+Step 3: Deploy the Bank of Anthos Application cd bank-of-anthos
+./deploy.sh kubectl
 
----
+Step 4: Verify Deployment kubectl get services -n boa
 
-## ☸️ Step 2: Create the GKE Autopilot Cluster
+------------------------------------------------------------------------
 
-Create the GKE cluster where the application will be deployed. This command reads values from your `.env.local` file.
+Part 2: Deploying the Save2Win AI Extension
 
-1) **Load your environment variables:**
-```bash
-source .env.local
-```
+Step 5: One-Time Setup cd .. gcloud artifacts repositories create
+"$AR_REPO_NAME" --repository-format=docker --location="$REGION"
+--project="\$PROJECT_ID"
 
-2) **Create the cluster:**
-```bash
-gcloud container clusters create-auto "$CLUSTER_NAME"   --project="$PROJECT_ID"   --region="$REGION"
-```
-- Uses the name, project, and region you defined.
-- `create-auto` enables **Autopilot** mode to simplify cluster operations.
+Permission script: source .env.local export NAMESPACE="boa" \# Save2Win
+Engine export GCSA_NAME="save2win-engine-gcsa" export
+KSA_NAME="save2win-engine-sa" gcloud iam service-accounts create
+${GCSA_NAME} --project=${PROJECT_ID} gcloud projects
+add-iam-policy-binding
+${PROJECT_ID} --member="serviceAccount:${GCSA_NAME}@\${PROJECT_ID}.iam.gserviceaccount.com"
+--role="roles/aiplatform.user" gcloud iam service-accounts
+add-iam-policy-binding
+${GCSA_NAME}@${PROJECT_ID}.iam.gserviceaccount.com
+--role="roles/iam.workloadIdentityUser"
+--member="serviceAccount:${PROJECT_ID}.svc.id.goog[${NAMESPACE}/\${KSA_NAME}\]"
 
-> ⏳ **Expected duration:** 5–10 minutes. The terminal returns to the prompt when the cluster is ready.
+# MCP Service
 
----
+export GCSA_NAME="mcp-service-gcsa" export KSA_NAME="mcp-service-sa"
+gcloud iam service-accounts create ${GCSA_NAME} --project=${PROJECT_ID}
+gcloud projects add-iam-policy-binding
+${PROJECT_ID} --member="serviceAccount:${GCSA_NAME}@\${PROJECT_ID}.iam.gserviceaccount.com"
+--role="roles/aiplatform.user" gcloud iam service-accounts
+add-iam-policy-binding
+${GCSA_NAME}@${PROJECT_ID}.iam.gserviceaccount.com
+--role="roles/iam.workloadIdentityUser"
+--member="serviceAccount:${PROJECT_ID}.svc.id.goog[${NAMESPACE}/\${KSA_NAME}\]"
 
-## 🚀 Step 3: Run the Automated Deployment Script
+Step 6: Deploy Microservices skaffold run -p gcb
+--default-repo="$REGION-docker.pkg.dev/$PROJECT_ID/\$AR_REPO_NAME"
 
-With your cluster running and local configuration set, run the deployment script. It handles authentication, cluster cleanup, and deployment via **Skaffold**.
+Annotate Service Accounts: kubectl annotate serviceaccount
+save2win-engine-sa --namespace boa
+iam.gke.io/gcp-service-account=save2win-engine-gcsa@${PROJECT_ID}.iam.gserviceaccount.com --overwrite kubectl annotate serviceaccount mcp-service-sa --namespace boa iam.gke.io/gcp-service-account=mcp-service-gcsa@${PROJECT_ID}.iam.gserviceaccount.com
+--overwrite
 
-1) **Make the script executable** (first time only):
-```bash
-chmod +x deploy-boa.sh
-```
+Final Run: skaffold dev -p gcb
+--default-repo="$REGION-docker.pkg.dev/$PROJECT_ID/\$AR_REPO_NAME"
 
-2) **Execute the deployment script:**
-```bash
-./deploy-boa.sh
-```
+Step 7: Verify and Use kubectl get ingress -n boa save2win-ingress
 
-**The script will:**
-- Prompt you to authenticate to Google Cloud using the email in `.env.local`.
-- Set your `kubectl` context to the new GKE cluster.
-- Wipe the `default` namespace to ensure a clean deployment.
-- Run `skaffold run` to build Bank of Anthos container images and deploy them.
-
-> ⏳ **Expected duration:** 10–15 minutes for the first build and deploy.
-
----
-
-## 🔍 Step 4: Verify the Deployment
-
-Confirm that the application is running correctly.
-
-1) **List Kubernetes services:**
-```bash
-kubectl get services
-```
-
-2) **Find the external IP** for the **frontend** service (some manifests use `frontend-external`). It can take a couple of minutes to appear.
-
-**Example output:**
-```text
-NAME                 TYPE           CLUSTER-IP      EXTERNAL-IP     PORT(S)        AGE
-...
-frontend             LoadBalancer   10.44.12.129    35.187.95.173   80:31108/TCP   5m
-...
-```
-
-3) **Open the app:** Copy the **EXTERNAL-IP** (e.g., `35.187.95.173`) into your browser. You should see the live **Bank of Anthos** application.
-
-🎉 **Congratulations!** The base platform is now successfully deployed.
-
----
-
-## 🛠️ Troubleshooting
-
-- **Permission denied on script**  
-  Ensure the file is executable:
-  ```bash
-  chmod +x deploy-boa.sh
-  ```
-
-- **`gke-gcloud-auth-plugin` not found**  
-  This is a common local setup issue. Re-run the installation commands from **Prerequisites** to install the auth plugin for `kubectl`.
-
-- **Skaffold build errors / permission issues**  
-  Ensure the following APIs are enabled in your GCP project:
-  - Cloud Build API
-  - Artifact Registry API
-  - Kubernetes Engine API
-
-  Enable via console or CLI:
-  ```bash
-  gcloud services enable cloudbuild.googleapis.com artifactregistry.googleapis.com container.googleapis.com --project "$PROJECT_ID"
-  ```
-
-- **No EXTERNAL-IP yet**  
-  LoadBalancer provisioning can take a few minutes. Re-run:
-  ```bash
-  kubectl get svc frontend
-  ```
-  (Or `frontend-external` if applicable.)
-
----
-
-**Document version:** 1.1
+Open browser at Ingress IP → Login with Bank of Anthos → See Save2Win
+Dashboard.

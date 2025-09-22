@@ -1,7 +1,16 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: mcp-service-sa
+  namespace: boa
+  annotations:
+    iam.gke.io/gcp-service-account: boa-runtime@gke-trial-472609.iam.gserviceaccount.com
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: mcp-service
+  namespace: boa
   labels:
     app: mcp-service
 spec:
@@ -14,35 +23,70 @@ spec:
       labels:
         app: mcp-service
     spec:
+      serviceAccountName: mcp-service-sa
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+      volumes:
+        - name: tmp
+          emptyDir: {}
       containers:
-        - name: mcp-server
-          # Skaffold will automatically replace 'mcp-service' with the full image URL.
+        - name: mcp
+          # IMPORTANT: let skaffold rewrite this by using the artifact name
           image: mcp-service
+          imagePullPolicy: IfNotPresent
           ports:
-            - containerPort: 8080
+            - name: http
+              containerPort: 8080
           env:
-            - name: PORT
-              value: "8080"
+            - name: VERTEX_LOCATION
+              value: "us-central1"
+            - name: PROJECT_ID
+              value: "gke-trial-472609"
+            - name: TRANSACTIONS_API_URL
+              value: "http://transactionhistory.boa.svc.cluster.local/transactions"
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: 8080
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            failureThreshold: 6
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 8080
+            initialDelaySeconds: 20
+            periodSeconds: 10
+          # Autopilot-friendly, not too big so it schedules quickly
           resources:
             requests:
-              cpu: "100m"
-              memory: "128Mi"
-            limits:
-              cpu: "250m"
+              cpu: "200m"
               memory: "256Mi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
 ---
 apiVersion: v1
 kind: Service
 metadata:
   name: mcp-service
+  namespace: boa
   labels:
     app: mcp-service
 spec:
-  # Exposes the service on an internal-only IP within the cluster.
-  type: ClusterIP 
+  type: ClusterIP
   selector:
     app: mcp-service
   ports:
-    - protocol: TCP
+    - name: http
       port: 80
       targetPort: 8080

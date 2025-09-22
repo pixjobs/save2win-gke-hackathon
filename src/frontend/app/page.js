@@ -1,44 +1,91 @@
 'use client';
-import { useState, useEffect } from 'react';
+
+import { useEffect, useState } from 'react';
 import styles from './page.module.css';
 import LoginScreen from './components/LoginScreen';
 import Dashboard from './components/Dashboard';
 import LoadingSpinner from './components/LoadingSpinner';
 
 export default function HomePage() {
-  const [jwt, setJwt] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [authed, setAuthed] = useState(false);
   const [gameState, setGameState] = useState(null);
-  const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
+  async function checkSession() {
+    const res = await fetch('/api/session', { cache: 'no-store' });
+    setAuthed(res.ok);
+    return res.ok;
+  }
+
+  async function loadGameState() {
+    setError(null);
+    const res = await fetch('/api/game-state', { cache: 'no-store' });
+    if (res.ok) {
+      setGameState(await res.json());
+      return true;
+    }
+    if (res.status === 401) {
+      setError('Connected to Bank of Anthos, but the game engine rejected the token (401).');
+      setGameState(null);
+      return false;
+    }
+    setError(`Engine error ${res.status}`);
+    setGameState(null);
+    return false;
+  }
+
   useEffect(() => {
-    const storedJwt = localStorage.getItem('s2w_jwt');
-    if (storedJwt) { setJwt(storedJwt); }
+    (async () => {
+      setLoading(true);
+      const hasSession = await checkSession();   // checks cookie only
+      if (hasSession) await loadGameState();     // engine call
+      setLoading(false);
+    })();
+
+    // Retry on tab focus (covers popup close)
+    const onFocus = async () => {
+      const hasSession = await checkSession();
+      if (hasSession) await loadGameState();
+    };
+    window.addEventListener('focus', onFocus);
+    return () => window.removeEventListener('focus', onFocus);
   }, []);
 
-  useEffect(() => {
-    if (!jwt) { setGameState(null); return; }
-    const fetchGameState = async () => {
-      setLoading(true); setError(null);
-      try {
-        const response = await fetch('/api/game-state', { headers: { 'Authorization': `Bearer ${jwt}` } });
-        if (!response.ok) {
-          const errorBody = await response.text();
-          throw new Error(`Failed to load data: ${response.status}. ${errorBody}`);
-        }
-        setGameState(await response.json());
-      } catch (e) { setError(e.message); } finally { setLoading(false); }
-    };
-    fetchGameState();
-  }, [jwt]);
-
-  const handleLogin = (token) => { localStorage.setItem('s2w_jwt', token); setJwt(token); };
-  const handleLogout = () => { localStorage.removeItem('s2w_jwt'); setJwt(null); };
-  const renderContent = () => {
-    if (loading) return <LoadingSpinner />;
-    if (error) return <div className={styles.errorCard}><p>Error: {error}</p><p>Please check your JWT or try again.</p></div>;
-    if (gameState) return <Dashboard gameState={gameState} onLogout={handleLogout} />;
-    return null;
+  const handleLogout = async () => {
+    try { await fetch('/api/logout', { method: 'POST' }); } catch {}
+    window.location.reload();
   };
-  return ( <main className={styles.main}> {!jwt ? <LoginScreen onLogin={handleLogin} /> : renderContent()} </main> );
+
+  if (loading) return <main className={styles.main}><LoadingSpinner /></main>;
+
+  if (!authed) {
+    return (
+      <main className={styles.main}>
+        {error ? <div className={styles.errorCard}><p>{error}</p></div> : null}
+        <LoginScreen />
+      </main>
+    );
+  }
+
+  if (error && !gameState) {
+    return (
+      <main className={styles.main}>
+        <div className={styles.errorCard}>
+          <p>{error}</p>
+          <p style={{fontSize:12,opacity:.8}}>
+            Tip: ensure the engine trusts BoA’s JWT public key and you’re forwarding it as <code>Authorization: Bearer …</code>.
+          </p>
+        </div>
+        {/* Optional: still show login to retry if desired */}
+        <LoginScreen />
+      </main>
+    );
+  }
+
+  return (
+    <main className={styles.main}>
+      <Dashboard gameState={gameState} onLogout={handleLogout} />
+    </main>
+  );
 }

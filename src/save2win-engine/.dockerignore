@@ -1,0 +1,32 @@
+# Python bytecode / caches
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.pytest_cache
+.pytest_cache/
+
+# Virtualenvs
+.venv/
+venv/
+env/
+
+# Build artifacts
+build/
+dist/
+*.egg-info/
+
+# Logs / misc
+*.log
+.coverage
+htmlcov/
+
+# VCS / editor
+.git
+.gitignore
+.vscode
+.idea
+
+# Env files (use K8s Secrets or WI, not baked files)
+.env
+.env.*

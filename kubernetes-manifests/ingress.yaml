@@ -1,0 +1,31 @@
+# kubernetes-manifests/ingress.yaml
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: save2win-ingress
+  namespace: boa
+  annotations:
+    kubernetes.io/ingress.class: "gce"
+    kubernetes.io/ingress.global-static-ip-name: "save2win"   # <-- your reserved name
+spec:
+  rules:
+  - http:
+      paths:
+      - path: /bank/*
+        pathType: ImplementationSpecific
+        backend:
+          service:
+            name: frontend
+            port: { number: 80 }
+      - path: /api/*
+        pathType: ImplementationSpecific
+        backend:
+          service:
+            name: save2win-frontend
+            port: { number: 80 }
+      - path: /*
+        pathType: ImplementationSpecific
+        backend:
+          service:
+            name: save2win-frontend
+            port: { number: 80 }

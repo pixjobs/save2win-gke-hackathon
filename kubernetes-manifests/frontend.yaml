@@ -1,3 +1,6 @@
+# ==============================================================================
+# Deployment: save2win-frontend
+# ==============================================================================
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -17,25 +20,107 @@ spec:
     spec:
       containers:
         - name: server
-          image: save2win-frontend # Skaffold will replace this
+          # e.g., gcr.io/your-project-id/save2win-frontend:latest
+          image: save2win-frontend
+          imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 3000
+          env:
+            - name: NEXT_PUBLIC_BOA_BASE_URL
+              value: ""
+            - name: BOA_TARGET
+              value: "http://frontend.boa.svc.cluster.local"
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: 3000
+            initialDelaySeconds: 3
+            periodSeconds: 5
+            failureThreshold: 6
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 3000
+            initialDelaySeconds: 10
+            periodSeconds: 10
           resources:
             requests:
-              cpu: "100m"
-              memory: "256Mi"
+              cpu: "250m"
+              memory: "512Mi"
+            limits:
+              cpu: "250m"
+              memory: "512Mi"
+
 ---
+# ==============================================================================
+# Service: ClusterIP + NEG for GCE Ingress
+# ==============================================================================
 apiVersion: v1
 kind: Service
 metadata:
   name: save2win-frontend
   namespace: boa
+  annotations:
+    cloud.google.com/neg: '{"ingress": true}'
+    cloud.google.com/backend-config: '{"default":"save2win-backend-config"}'
 spec:
-  # This creates a public IP address to access your web app.
-  type: LoadBalancer
+  type: ClusterIP
   selector:
     app: save2win-frontend
   ports:
-    - protocol: TCP
+    - name: http
       port: 80
       targetPort: 3000
+
+---
+# ==============================================================================
+# BackendConfig: Health check config used by the Ingress' backend service
+# ==============================================================================
+apiVersion: cloud.google.com/v1
+kind: BackendConfig
+metadata:
+  name: save2win-backend-config
+  namespace: boa
+spec:
+  healthCheck:
+    type: HTTP
+    requestPath: /healthz
+    port: 3000
+    checkIntervalSec: 15
+    timeoutSec: 5
+    healthyThreshold: 1
+    unhealthyThreshold: 3
+
+---
+# ==============================================================================
+# Ingress: External HTTP LB pointing to the frontend Service
+# ==============================================================================
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: save2win-ingress
+  namespace: boa
+  annotations:
+    kubernetes.io.ingress.class: "gce"
+    # <<< UPDATED with your static IP name.
+    kubernetes.io/ingress.global-static-ip-name: "save2win"
+    networking.gke.io/v1beta1.FrontendConfig: "save2win-frontend-config"
+spec:
+  defaultBackend:
+    service:
+      name: save2win-frontend
+      port:
+        number: 80
+
+---
+# ==============================================================================
+# FrontendConfig: basic options for the Google external HTTP(S) LB
+# ==============================================================================
+apiVersion: networking.gke.io/v1beta1
+kind: FrontendConfig
+metadata:
+  name: save2win-frontend-config
+  namespace: boa
+spec:
+  redirectToHttps:
+    enabled: false
